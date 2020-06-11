@@ -13,8 +13,8 @@ Resources:
   Topic:
     Type: AWS::SNS::Topic
     Properties:
-      DisplayName: Fugue
-      TopicName: FugueSNSTopic
+      DisplayName: fugue-events
+      TopicName: fugue-events
 
   TopicPolicy:
     Type: AWS::SNS::TopicPolicy
