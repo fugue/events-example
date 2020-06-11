@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Fugue events example
+
+Transform:
+- AWS::Serverless-2016-10-31
+
+Parameters:
+  LogRetentionInDays:
+    Default: "30"
+    Description: Number of days to retain log messages
+    Type: String
+
+Resources:
+
+  FugueTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Fugue
+      TopicName: FugueSNSTopic
+
+  FugueTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref FugueTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Id: "fugue_topic_policy"
+        Statement: 
+          - Sid: "cross_account_allow"
+            Effect: "Allow"
+            Principal:
+              AWS: arn:aws:iam::370134896156:role/fugue-sns-publish
+            Action: "sns:Publish"
+            Resource: !Ref FugueTopic
+          - Sid: "cross_account_deny"
+            Effect: "Deny"
+            Principal:
+              AWS: arn:aws:iam::370134896156:role/fugue-sns-publish
+            NotAction: "sns:Publish"
+            Resource: !Ref FugueTopic
+          - Sid: "default_allow"
+            Effect: "Allow"
+            Principal: 
+              AWS: "*"
+            Action: 
+              - "sns:GetTopicAttributes"
+              - "sns:SetTopicAttributes"
+              - "sns:AddPermission"
+              - "sns:RemovePermission"
+              - "sns:DeleteTopic"
+              - "sns:Subscribe"
+              - "sns:ListSubscriptionsByTopic"
+              - "sns:Publish"
+            Resource: !Ref FugueTopic
+            Condition:
+              StringEquals:
+                "AWS:SourceOwner": !Ref AWS::AccountId
+
+  FugueEventHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Lambda function that processes notifications from Fugue
+      Runtime: nodejs12.x
+      Handler: src/index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        SNSTopicEvent:
+          Type: SNS
+          Properties:
+            Topic: !Ref FugueTopic
+      Environment:
+        Variables:
+          SECRET_ARN: !Ref FugueApiCredentials
+      MemorySize: 512
+      Timeout: 180
+      Policies:
+        # Give Lambda basic execution Permission to the helloFromLambda
+        - AWSLambdaBasicExecutionRole
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
+      Policies:
+      - PolicyName: get-secret
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Sid: AllowGetSecretValue
+            Effect: Allow
+            Action:
+            - "secretsmanager:GetSecretValue"
+            Resource: !Ref FugueApiCredentials
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${FugueEventHandler}"
+      RetentionInDays: !Ref LogRetentionInDays
+
+  LogStream:
+    Type: AWS::Logs::LogStream
+    DependsOn: LogGroup
+    Properties:
+      LogGroupName: !Ref LogGroup
+      LogStreamName: "default"
+
+  FugueApiCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Secret containing credentials for the Fugue API
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${!Ref RDSUserName}"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: App
+          Value: fugue-events-example
