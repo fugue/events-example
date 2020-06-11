@@ -1,8 +1,6 @@
-AWSTemplateFormatVersion: 2010-09-09
-Description: Fugue events example
-
-Transform:
-- AWS::Serverless-2016-10-31
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fugue API Events
+Transform: AWS::Serverless-2016-10-31
 
 Parameters:
   LogRetentionInDays:
@@ -12,17 +10,17 @@ Parameters:
 
 Resources:
 
-  FugueTopic:
+  Topic:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Fugue
       TopicName: FugueSNSTopic
 
-  FugueTopicPolicy:
+  TopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref FugueTopic
+        - !Ref Topic
       PolicyDocument:
         Version: "2012-10-17"
         Id: "fugue_topic_policy"
@@ -32,18 +30,18 @@ Resources:
             Principal:
               AWS: arn:aws:iam::370134896156:role/fugue-sns-publish
             Action: "sns:Publish"
-            Resource: !Ref FugueTopic
+            Resource: !Ref Topic
           - Sid: "cross_account_deny"
             Effect: "Deny"
             Principal:
               AWS: arn:aws:iam::370134896156:role/fugue-sns-publish
             NotAction: "sns:Publish"
-            Resource: !Ref FugueTopic
+            Resource: !Ref Topic
           - Sid: "default_allow"
             Effect: "Allow"
             Principal: 
               AWS: "*"
-            Action: 
+            Action:
               - "sns:GetTopicAttributes"
               - "sns:SetTopicAttributes"
               - "sns:AddPermission"
@@ -52,12 +50,12 @@ Resources:
               - "sns:Subscribe"
               - "sns:ListSubscriptionsByTopic"
               - "sns:Publish"
-            Resource: !Ref FugueTopic
+            Resource: !Ref Topic
             Condition:
               StringEquals:
                 "AWS:SourceOwner": !Ref AWS::AccountId
 
-  FugueEventHandler:
+  EventHandler:
     Type: AWS::Serverless::Function
     Properties:
       Description: Lambda function that processes notifications from Fugue
@@ -68,14 +66,13 @@ Resources:
         SNSTopicEvent:
           Type: SNS
           Properties:
-            Topic: !Ref FugueTopic
+            Topic: !Ref Topic
       Environment:
         Variables:
-          SECRET_ARN: !Ref FugueApiCredentials
-      MemorySize: 512
-      Timeout: 180
+          SECRET_ARN: !Ref ApiCredentials
+      MemorySize: 1024
+      Timeout: 60
       Policies:
-        # Give Lambda basic execution Permission to the helloFromLambda
         - AWSLambdaBasicExecutionRole
 
   LambdaRole:
@@ -100,30 +97,40 @@ Resources:
             Effect: Allow
             Action:
             - "secretsmanager:GetSecretValue"
-            Resource: !Ref FugueApiCredentials
+            Resource: !Ref ApiCredentials
+
+  ApiCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Secret to contain a client ID and secret for the Fugue API
 
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${FugueEventHandler}"
+      LogGroupName: !Sub "/aws/lambda/${EventHandler}"
       RetentionInDays: !Ref LogRetentionInDays
 
   LogStream:
     Type: AWS::Logs::LogStream
-    DependsOn: LogGroup
     Properties:
       LogGroupName: !Ref LogGroup
       LogStreamName: "default"
 
-  FugueApiCredentials:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: Secret containing credentials for the Fugue API
-      GenerateSecretString:
-        SecretStringTemplate: !Sub '{"username": "${!Ref RDSUserName}"}'
-        GenerateStringKey: 'password'
-        PasswordLength: 16
-        ExcludeCharacters: '"@/\'
-      Tags:
-        - Key: App
-          Value: fugue-events-example
+Outputs:
+  Function:
+    Description: "Lambda Function"
+    Value: !Ref EventHandler
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", Function ] ]
+
+  Topic:
+    Description: "SNS Topic"
+    Value: !Ref Topic
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", Topic ] ]
+
+  Secret:
+    Description: "Fugue API Credentials Secret"
+    Value: !Ref ApiCredentials
+    Export:
+      Name: !Join [ ":", [ !Ref "AWS::StackName", Secret ] ]

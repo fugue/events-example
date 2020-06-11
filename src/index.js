@@ -27,10 +27,13 @@ async function getSecret (secretName, region) {
   })
 }
 
-async function getEvents (apiUrl, clientId, clientSecret) {
+async function getEvents (apiUrl, clientId, clientSecret, offset) {
   const options = {
     method: 'GET',
     auth: clientId + ':' + clientSecret
+  }
+  if (offset) {
+    apiUrl += '?offset=' + offset
   }
   return new Promise((resolve, reject) => {
     const req = https.get(apiUrl, options, res => {
@@ -54,7 +57,15 @@ async function getEvents (apiUrl, clientId, clientSecret) {
 }
 
 exports.handler = async function (event, context) {
-  const message = JSON.parse(event.Records[0].Sns.Message)
+
+  var message;
+  const rawMessage = event.Records[0].Sns.Message
+  try {
+    message = JSON.parse(rawMessage)
+  } catch (err) {
+    console.log('Ignoring non-JSON message:', rawMessage)
+    return
+  }
 
   const secretArn = process.env.SECRET_ARN
   if (!secretArn) {
@@ -72,13 +83,26 @@ exports.handler = async function (event, context) {
     throw Error('Fugue API credentials not found in secret')
   }
 
-  const events = await getEvents(apiUrl, fugueId, fugueSecret)
-  if (events.is_truncated) {
-    console.log('Response was truncated. Next offset:', events.next_offset)
+  console.log('Requesting events:', apiUrl)
+
+  var offset = 0;
+  var events = [];
+
+  // Each request will retrieve up to 100 events. Loop as needed to retrieve
+  // all events by updating the `offset` query parameter as needed.
+  while (true) {
+    const response = await getEvents(apiUrl, fugueId, fugueSecret, offset)
+    events.push(...response.items)
+    if (!response.is_truncated) {
+      break
+    }
+    console.log('Response was truncated. Next offset:', response.next_offset)
+    offset = response.next_offset
   }
 
-  for (let i = 0; i < events.items.length; i++) {
-    console.log('Event:', events.items[i])
+  console.log('Retrieved', events.length, 'events')
+  for (let i = 0; i < events.length; i++) {
+    console.log('Event:', events[i])
   }
   return events.length
 }
