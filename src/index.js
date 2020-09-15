@@ -11,6 +11,7 @@
 
 const aws = require('aws-sdk')
 const https = require('https')
+const url = require('url')
 
 var secretValue = null
 
@@ -56,6 +57,36 @@ async function getEvents (apiUrl, clientId, clientSecret, offset) {
   })
 }
 
+async function shareOnSlack(channel, userName, text, emoji, message, webhookUrl) {
+
+  const message = event.Records[0].Sns.Message;
+  const parsedUrl = url.Parse(webhookUrl);
+  const postData = {
+      "channel": channel,
+      "username": userName,
+      "text": text,
+      "icon_emoji": emoji,
+      "attachments": [{ "text": message }],
+  };
+  const options = {
+      method: 'POST',
+      hostname: parsedUrl.hostname,
+      port: 443,
+      path: parsedUrl.path,
+  };
+
+  var req = https.request(options, function(res) {
+    res.setEncoding('utf8');
+    res.on('data', function (chunk) {
+      context.done(null);
+    });
+  });
+
+  req.on('error', function(e) { console.log('problem with request: ' + e.message); });
+  req.write(JSON.stringify(postData));
+  req.end();
+}
+
 exports.handler = async function (event, context) {
 
   var message;
@@ -70,6 +101,18 @@ exports.handler = async function (event, context) {
   const secretArn = process.env.SECRET_ARN
   if (!secretArn) {
     throw Error('SECRET_ARN is unset')
+  }
+  const webhookUrl = process.env.WEBHOOK_URL
+  if (!webhookUrl) {
+    throw Error('WEBHOOK_URL is unset')
+  }
+  const slackChannel = process.env.SLACK_CHANNEL
+  if (!slackChannel) {
+    throw Error('SLACK_CHANNEL is unset')
+  }
+  const slackUsername = process.env.SLACK_USERNAME
+  if (!slackUsername) {
+    throw Error('SLACK_USERNAME is unset')
   }
 
   if (!secretValue) {
@@ -104,5 +147,10 @@ exports.handler = async function (event, context) {
   for (let i = 0; i < events.length; i++) {
     console.log('Event:', events[i])
   }
+
+  shareOnSlack(slackChannel, slackUsername, "HEY", null, "MESSAGE", webhookUrl)
+
+  console.log('Shared on Slack!')
+
   return events.length
 }
