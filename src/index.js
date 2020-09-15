@@ -11,6 +11,7 @@
 
 const aws = require('aws-sdk')
 const https = require('https')
+const splunk = require('splunk-logging')
 
 var secretValue = null
 
@@ -72,15 +73,24 @@ exports.handler = async function (event, context) {
     throw Error('SECRET_ARN is unset')
   }
 
+  const splunkUrl = process.env.SPLUNK_URL
+  if (!splunkUrl) {
+    throw Error('SPLUNK_URL is unset')
+  }
+
   if (!secretValue) {
     secretValue = await getSecret(secretArn)
   }
   const fugueId = secretValue.FUGUE_API_ID
   const fugueSecret = secretValue.FUGUE_API_SECRET
+  const splunkToken = secretValue.SPLUNK_TOKEN
   const apiUrl = message.api_url
 
   if (!fugueId || !fugueSecret) {
     throw Error('Fugue API credentials not found in secret')
+  }
+  if (!splunkToken) {
+    throw Error('SPLUNK_TOKEN not found in secret')
   }
 
   console.log('Requesting events:', apiUrl)
@@ -96,13 +106,23 @@ exports.handler = async function (event, context) {
     if (!response.is_truncated) {
       break
     }
-    console.log('Response was truncated. Next offset:', response.next_offset)
     offset = response.next_offset
   }
 
+  var SplunkLogger = new splunk.Logger({
+    token: splunkToken,
+    url: splunkUrl
+  })
+
   console.log('Retrieved', events.length, 'events')
+
   for (let i = 0; i < events.length; i++) {
     console.log('Event:', events[i])
+    let splunkPayload = { message: events[i] }
+    SplunkLogger.send(splunkPayload, function(err, resp, body) {
+      console.log("Response from Splunk:", i, body);
+    })
   }
+
   return events.length
 }

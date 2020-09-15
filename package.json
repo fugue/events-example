@@ -4,7 +4,8 @@
     "version": "0.0.1",
     "private": true,
     "dependencies": {
-        "aws-sdk": "^2.693.0"
+        "aws-sdk": "^2.693.0",
+        "splunk-logging": "^0.10.1"
     },
     "devDependencies": {
         "jest": "^24.7.1"
