@@ -120,9 +120,18 @@ exports.handler = async function (event, context) {
     console.log('Event:', events[i])
     let splunkPayload = { message: events[i] }
     SplunkLogger.send(splunkPayload, function(err, resp, body) {
-      console.log("Response from Splunk:", i, body);
+      if (err) {
+        throw Error('Splunk error: ' + err)
+      }
     })
   }
+
+  SplunkLogger.flush(function(err, resp, body) {
+    console.log("Response from Splunk:", err, resp, body);
+    if (err) {
+      throw Error('Splunk error: ' + err)
+    }
+  })
 
   return events.length
 }
