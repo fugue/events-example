@@ -3,8 +3,7 @@
 This project is an example of using the Fugue API to retrieve and process
 compliance and drift JSON events in an AWS Lambda function.
 
-Once the Lambda has the events, it may then pass them to other services like
-Splunk, Slack, and others.
+The Lambda retrieves events from the Fugue API and then sends them to Splunk.
 
 ## Overview
 
@@ -25,59 +24,56 @@ You will need the following to get started:
 * Active AWS credentials
 * [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv1.html)
 * [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* [Fugue API Client ID and Secret](https://docs.fugue.co/api.html#api-client-id-secret)
+* GNU Make (recommended)
 
-Confirm the AWS CLI and SAM are installed correctly by running these commands
-to show version information:
-
-```bash
-aws --version
-sam --version
-```
-
-## Deploy Using SAM
-
-To build and deploy the Lambda using SAM and CloudFormation, run the following
-in your shell:
+Confirm you have the required binaries by running these commands:
 
 ```bash
-sam build
-sam deploy --guided
+$ aws --version
+$ sam --version
+$ make --version
 ```
 
-The second command offers a series of prompts to configure the deployment.
+## Variables
 
-## Providing Fugue API Credentials to the Lambda Function
+The following environment variables must be set locally to deploy this application:
 
-The SAM deploy creates a secret in AWS SecretsManager that is accessed by the
-Lambda at runtime to retrieve credentials for the Fugue API.
+* `SPLUNK_URL` - Splunk HTTP event collector URL
+* `SPLUNK_TOKEN` - Splunk authentication token
+* `FUGUE_API_ID` - Fugue API client ID
+* `FUGUE_API_SECRET` - Fugue API client secret
 
-Note the secret ARN is output at the end of the `sam deploy` command.
+See the [Fugue Documentation](https://docs.fugue.co/api.html#api-client-id-secret)
+for instructions on creating Fugue API credentials.
 
-You will need to run the following command to store your Fugue API client ID
-and client secret:
+## Install
 
+AWS SAM is used to build a NodeJS Lambda and deploy it as part of
+a CloudFormation stack. We recommend using the Makefile and its targets to
+run the build and deploy, although you could also use the SAM CLI directly if
+you wish. See the [Makefile](./Makefile) for more information.
+
+Once you have the environment variables set, run the following commands to build
+and deploy the application:
+
+```bash
+$ make deploy
+$ make update_secret
 ```
-aws secretsmanager put-secret-value \
-    --secret-id <SECRET_ARN> \
-    --secret-string '{"FUGUE_API_ID":"YOUR_CLIENT_ID","FUGUE_API_SECRET":"YOUR_CLIENT_SECRET"}'
-```
 
-The [Makefile](./Makefile) contains a helper target that can be used to
-retrieve the secret ARN and run the above command. To use it, set environment
-variables in your environment as follows and then run the make command:
+The SAM CLI will prompt you for some input prior to deployment.
 
-```
-export FUGUE_API_ID=<YOUR_CLIENT_ID>
-export FUGUE_API_SECRET=<YOUR CLIENT SECRET>
-make update_secret
-```
+## Secret Management
+
+AWS SecretsManager is used to store credentials for the Fugue and Splunk APIs.
+The `make update_secret` command stores several of the variables mentioned above
+in a SecretsManager secret that is then accessed by the Lambda at runtime.
 
 ## Cleanup
 
 To remove these resources from your account, delete its CloudFormation stack
-in the AWS console or use the following AWS CLI command:
+in the AWS console or use the following command:
 
 ```bash
-aws cloudformation delete-stack --stack-name fugue-events
+$ make teardown
 ```

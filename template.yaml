@@ -7,6 +7,9 @@ Parameters:
     Default: "30"
     Description: Number of days to retain log messages
     Type: String
+  SplunkUrl:
+    Description: Splunk url to publish to
+    Type: String
 
 Resources:
 
@@ -70,6 +73,7 @@ Resources:
       Environment:
         Variables:
           SECRET_ARN: !Ref ApiCredentials
+          SPLUNK_URL: !Ref SplunkUrl
       MemorySize: 1024
       Timeout: 60
       Policies:
