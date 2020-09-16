@@ -156,13 +156,11 @@ exports.handler = async function (event, context) {
   for (let i = 0; i < events.length; i += 1) {
     const fugueEvent = events[i];
     const response = await sendToSplunk(splunkLogger, {
-      message: {
-        event: fugueEvent,
-        scan_id: scanId,
-        environment_id: environmentId,
-        environment_name: environmentName,
-        summary,
-      },
+      event: fugueEvent,
+      scan_id: scanId,
+      environment_id: environmentId,
+      environment_name: environmentName,
+      summary,
     });
     log.info({
       event_id: fugueEvent.id,
